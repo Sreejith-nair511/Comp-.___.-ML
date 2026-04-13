@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        .container {
+            background: #16213e;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #764ba2;
+        }
+        video {
+            width: 100%;
+            margin-top: 20px;
+            border-radius: 10px;
+        }
+        .log {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎬 Video Backend Test</h1>
+    
+    <div class="container">
+        <h2>1. Upload Video</h2>
+        <input type="file" id="videoFile" accept="video/*" />
+        <button onclick="uploadVideo()">Upload</button>
+        <div id="uploadStatus"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. Test Video URL</h2>
+        <input type="text" id="videoUrl" placeholder="Enter video URL" style="width: 100%; padding: 10px; margin: 10px 0;" />
+        <button onclick="testVideoUrl()">Test URL</button>
+        <button onclick="checkBackendStatus()">Check Backend Status</button>
+    </div>
+
+    <div class="container">
+        <h2>3. Video Player</h2>
+        <video id="testPlayer" controls>
+            <source src="" type="video/mp4" />
+            Your browser does not support the video tag.
+        </video>
+        <div id="videoStatus"></div>
+    </div>
+
+    <div class="container">
+        <h2>Logs</h2>
+        <div class="log" id="logs"></div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:8000';
+        let uploadedVideoId = null;
+        let uploadedFilename = null;
+
+        function log(message) {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            logs.innerHTML += `[${timestamp}] ${message}<br>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+
+        async function uploadVideo() {
+            const fileInput = document.getElementById('videoFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a video file first');
+                return;
+            }
+
+            log('Uploading video: ' + file.name);
+            
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/upload-video/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                log('✅ Upload successful!');
+                log('Video ID: ' + data.video_id);
+                log('Filename: ' + data.filename);
+                log('Duration: ' + data.duration + 's');
+                log('FPS: ' + data.fps);
+                log('Total Frames: ' + data.total_frames);
+
+                uploadedVideoId = data.video_id;
+                uploadedFilename = data.filename;
+
+                document.getElementById('uploadStatus').innerHTML = 
+                    `<p style="color: #00ff88;">✅ Upload successful!</p>
+                     <p>Video ID: ${data.video_id}</p>
+                     <p>Filename: ${data.filename}</p>`;
+
+                // Auto-fill the test URL
+                const videoUrl = `${BACKEND_URL}/uploads/${data.filename}`;
+                document.getElementById('videoUrl').value = videoUrl;
+                
+                log('Video URL: ' + videoUrl);
+
+            } catch (error) {
+                log('❌ Upload failed: ' + error.message);
+                document.getElementById('uploadStatus').innerHTML = 
+                    `<p style="color: #ff4757;">❌ Upload failed: ${error.message}</p>`;
+            }
+        }
+
+        function testVideoUrl() {
+            const url = document.getElementById('videoUrl').value;
+            const player = document.getElementById('testPlayer');
+            const status = document.getElementById('videoStatus');
+
+            if (!url) {
+                alert('Please enter a video URL');
+                return;
+            }
+
+            log('Testing video URL: ' + url);
+
+            player.src = url;
+            player.load();
+
+            player.onloadeddata = function() {
+                log('✅ Video loaded successfully!');
+                status.innerHTML = '<p style="color: #00ff88;">✅ Video loaded and ready to play!</p>';
+            };
+
+            player.onerror = function() {
+                const error = player.error;
+                let errorMsg = 'Unknown error';
+                
+                if (error) {
+                    switch(error.code) {
+                        case 1: errorMsg = 'Loading aborted'; break;
+                        case 2: errorMsg = 'Network error'; break;
+                        case 3: errorMsg = 'Decoding error'; break;
+                        case 4: errorMsg = 'Video not found or format not supported'; break;
+                    }
+                }
+                
+                log('❌ Video error: ' + errorMsg);
+                status.innerHTML = `<p style="color: #ff4757;">❌ ${errorMsg}</p>`;
+            };
+        }
+
+        async function checkBackendStatus() {
+            log('Checking backend status...');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/`);
+                
+                if (response.ok) {
+                    log('✅ Backend is running!');
+                    log('API Root: ' + BACKEND_URL);
+                    
+                    // Check if uploads directory exists
+                    const testResponse = await fetch(`${BACKEND_URL}/uploads/`);
+                    if (testResponse.ok || testResponse.status === 404) {
+                        log('✅ /uploads endpoint exists');
+                    } else {
+                        log('⚠️ /uploads endpoint returned: ' + testResponse.status);
+                    }
+                    
+                } else {
+                    log('❌ Backend returned: ' + response.status);
+                }
+            } catch (error) {
+                log('❌ Cannot reach backend: ' + error.message);
+                log('Make sure backend is running on ' + BACKEND_URL);
+            }
+        }
+
+        // Initial check
+        checkBackendStatus();
+    </script>
+</body>
+</html>

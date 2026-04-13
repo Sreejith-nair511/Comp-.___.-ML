@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backend Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+        }
+        .status {
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .success { background: #00b894; }
+        .error { background: #d63031; }
+        .warning { background: #fdcb6e; color: #333; }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #764ba2; }
+        .log {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔌 Backend Connection Test</h1>
+    <button onclick="testBackend()">Test Backend Connection</button>
+    <button onclick="testUpload()">Test Upload Endpoint</button>
+    <div id="result"></div>
+    <div class="log" id="logs"></div>
+
+    <script>
+        function log(msg, type='info') {
+            const logs = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+            logs.innerHTML += `[${time}] ${icon} ${msg}<br>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(msg);
+        }
+
+        async function testBackend() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Testing...</p>';
+            
+            try {
+                log('Connecting to http://localhost:8000/...');
+                const response = await fetch('http://localhost:8000/');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('Backend is running!', 'success');
+                    log('API Title: ' + (data.title || 'N/A'), 'success');
+                    log('API Version: ' + (data.version || 'N/A'), 'success');
+                    result.innerHTML = '<div class="status success"><h2>✅ Backend is Running!</h2><p>Port 8000 is accessible</p></div>';
+                    
+                    // Test uploads endpoint
+                    log('Testing /uploads endpoint...');
+                    try {
+                        const uploadsResponse = await fetch('http://localhost:8000/uploads/');
+                        if (uploadsResponse.ok || uploadsResponse.status === 404 || uploadsResponse.status === 403) {
+                            log('/uploads endpoint exists', 'success');
+                            result.innerHTML += '<p style="margin-top:10px;">✅ /uploads directory is mounted</p>';
+                        }
+                    } catch (e) {
+                        log('/uploads endpoint error: ' + e.message, 'error');
+                    }
+                    
+                } else {
+                    log('Backend returned status: ' + response.status, 'error');
+                    result.innerHTML = '<div class="status error"><h2>❌ Backend Error</h2><p>Status: ' + response.status + '</p></div>';
+                }
+            } catch (error) {
+                log('Cannot reach backend: ' + error.message, 'error');
+                result.innerHTML = '<div class="status error"><h2>❌ Backend Not Running</h2><p>' + error.message + '</p></div>';
+                
+                log('', 'info');
+                log('SOLUTION:', 'info');
+                log('1. Open Terminal', 'info');
+                log('2. Run: cd crowd-risk-prediction', 'info');
+                log('3. Run: uvicorn api.main:app --reload --port 8000', 'info');
+                log('4. Wait for "Application startup complete"', 'info');
+                log('5. Click "Test Backend Connection" again', 'info');
+            }
+        }
+
+        async function testUpload() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Testing upload endpoint...</p>';
+            
+            try {
+                log('Testing POST /upload-video/ endpoint...');
+                
+                // Create a small test file
+                const testContent = 'test';
+                const testFile = new File([testContent], 'test.txt', { type: 'text/plain' });
+                const formData = new FormData();
+                formData.append('file', testFile);
+                
+                const response = await fetch('http://localhost:8000/upload-video/', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log('Upload endpoint works!', 'success');
+                    log('Response: ' + JSON.stringify(data), 'success');
+                    result.innerHTML = '<div class="status success"><h2>✅ Upload Endpoint Works!</h2></div>';
+                } else {
+                    const errorData = await response.json();
+                    log('Upload returned: ' + response.status, 'warning');
+                    log('Error: ' + (errorData.detail || 'Unknown'), 'warning');
+                    result.innerHTML = '<div class="status warning"><h2>⚠️ Upload Endpoint Response</h2><p>Status: ' + response.status + '<br>Detail: ' + (errorData.detail || 'N/A') + '</p></div>';
+                }
+            } catch (error) {
+                log('Upload test failed: ' + error.message, 'error');
+                result.innerHTML = '<div class="status error"><h2>❌ Upload Test Failed</h2><p>' + error.message + '</p></div>';
+            }
+        }
+
+        // Auto-test on load
+        window.onload = () => {
+            log('Page loaded. Click buttons to test.');
+            testBackend();
+        };
+    </script>
+</body>
+</html>
