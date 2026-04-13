@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUploadCloud, FiFile, FiCheck, FiLoader, FiAlertCircle } from 'react-icons/fi';
 
@@ -27,27 +26,36 @@ export default function VideoUpload({ onUploadComplete }: VideoUploadProps) {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:8000/upload-video/', formData, {
-        onUploadProgress: (progressEvent) => {
-          const progressVal = progressEvent.total
-            ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-            : 0;
-          setUploadProgress(progressVal);
-        },
+      const xhr = new XMLHttpRequest();
+      
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          setUploadProgress(Math.round((event.loaded / event.total) * 100));
+        }
       });
 
-      if (response.data && response.data.video_id) {
-        onUploadComplete(response.data.video_id, response.data);
-      }
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      let errMsg = 'Failed to upload video.';
-      if (err.response) {
-        errMsg = err.response.data?.detail || `Server error: ${err.response.status}`;
-      } else if (err.request) {
-        errMsg = 'Cannot reach backend server. Make sure it is running on port 8000.';
-      }
-      setError(errMsg);
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          setUploadProgress(100);
+          setTimeout(() => {
+            onUploadComplete(response.video_id, response);
+          }, 500);
+        } else {
+          setError('Upload failed. Please try again.');
+          setIsUploading(false);
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        setError('Network error. Please check your connection.');
+        setIsUploading(false);
+      });
+
+      xhr.open('POST', 'http://localhost:8000/api/v1/upload-video/');
+      xhr.send(formData);
+    } catch (err) {
+      setError('Upload failed. Please try again.');
       setIsUploading(false);
     }
   }, [onUploadComplete]);
@@ -55,7 +63,7 @@ export default function VideoUpload({ onUploadComplete }: VideoUploadProps) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'video/*': ['.mp4', '.avi', '.mov', '.mkv']
+      'video/*': ['.mp4', '.mov', '.avi']
     },
     multiple: false,
     disabled: isUploading
@@ -82,60 +90,57 @@ export default function VideoUpload({ onUploadComplete }: VideoUploadProps) {
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
               className="w-full h-full"
             >
-            <input {...getInputProps()} />
-            
-            {/* Background scanner effect on hover */}
-            <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-purple-500/10 to-transparent translate-y-[-100%] group-hover:translate-y-[200%] transition-transform duration-[2s] ease-in-out pointer-events-none" />
-
-            <div className="relative z-10 flex flex-col items-center">
-              <div className={`
-                w-20 h-20 rounded-2xl flex items-center justify-center mb-6
-                transition-transform duration-500 group-hover:scale-110
-                ${isDragActive ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-400'}
-              `}>
-                <FiUploadCloud className="w-10 h-10" />
-              </div>
+              <input {...getInputProps()} />
               
-              <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
-                {isDragActive ? 'Release to Initialize' : 'Initialize Vision Stream'}
-              </h3>
-              <p className="text-slate-500 text-sm font-medium">
-                Drag & drop crowd footage or <span className="text-purple-400 font-bold italic">browse system</span>
-              </p>
-              
-              <div className="mt-8 flex items-center space-x-6">
-                <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
-                  <FiFile className="w-3 h-3" />
-                  <span>MP4 / MOV / AVI</span>
+              {/* Background scanner effect on hover */}
+              <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-purple-500/10 to-transparent translate-y-[-100%] group-hover:translate-y-[200%] transition-transform duration-[2s] ease-in-out pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className={`
+                  w-20 h-20 rounded-2xl flex items-center justify-center mb-6
+                  transition-transform duration-500 group-hover:scale-110
+                  ${isDragActive ? 'bg-purple-500 text-white' : 'bg-slate-800 text-slate-400'}
+                `}>
+                  <FiUploadCloud className="w-10 h-10" />
                 </div>
-                <div className="w-1 h-1 rounded-full bg-slate-800" />
-                <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
-                  <FiCheck className="w-3 h-3" />
-                  <span>CIRI COMPLIANT</span>
+                
+                <h3 className="text-xl font-bold text-white mb-2 tracking-tight">
+                  {isDragActive ? 'Release to Initialize' : 'Initialize Vision Stream'}
+                </h3>
+                <p className="text-slate-500 text-sm font-medium">
+                  Drag & drop crowd footage or <span className="text-purple-400 font-bold italic">browse system</span>
+                </p>
+                
+                <div className="mt-8 flex items-center space-x-6">
+                  <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                    <FiFile className="w-3 h-3" />
+                    <span>MP4 / MOV / AVI</span>
+                  </div>
+                  <div className="w-1 h-1 rounded-full bg-slate-800" />
+                  <div className="flex items-center space-x-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                    <FiCheck className="w-3 h-3" />
+                    <span>CIRI COMPLIANT</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {error && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-6 flex items-center space-x-2 text-red-500 text-xs font-bold"
-              >
-                <FiAlertCircle className="w-4 h-4" />
-                <span>{error}</span>
-              </motion.div>
-            )}
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-6 flex items-center space-x-2 text-red-500 text-xs font-bold"
+                >
+                  <FiAlertCircle className="w-4 h-4" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
             </motion.div>
           </div>
         ) : (
           <div
             key="upload-active"
-            initial={{ opacity: 0, scale: 1.02 }}
-            animate={{ opacity: 1, scale: 1 }}
             className="aspect-[21/9] rounded-3xl border border-slate-800 bg-slate-900/40 p-8 flex flex-col items-center justify-center relative overflow-hidden"
           >
              {/* Scanning Line */}
